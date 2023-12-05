@@ -1,0 +1,72 @@
+package com.example.library.utils;
+
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.StrUtil;
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.algorithms.Algorithm;
+import com.example.library.entity.Admin;
+import com.example.library.service.IAdminService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+import javax.annotation.PostConstruct;
+import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
+import java.util.Date;
+
+@Slf4j
+@Component
+public class TokenUtils {
+    private static IAdminService staticAdminService;
+
+    @Resource
+    private IAdminService adminService;
+
+    // 项目在启动的时候调用该方法
+    @PostConstruct
+    public void setAdminService() {
+        staticAdminService = adminService;
+    }
+
+    /**
+     * 创建token
+     * @param adminId 用户id
+     * @param sign 加密密钥
+     * @return 返回 token
+     */
+    public static String genToken(String adminId, String sign) {
+        return JWT.create().withAudience(adminId) // 将 admin id 保存到token里面 作为载荷
+                .withExpiresAt(DateUtil.offsetHour(new Date(), 2)) // 2小时过期
+                .sign(Algorithm.HMAC256(sign)); // password 作为密钥
+    }
+
+
+    /**
+     * 获得当前用户token
+     * @return
+     */
+    public static Admin getCurrentAdmin(){
+        String token = null;
+        try{
+            HttpServletRequest request = ((ServletRequestAttributes)RequestContextHolder.getRequestAttributes()).getRequest();
+             token = request.getHeader("token");
+            if (StrUtil.isBlank(token)){
+               token = request.getParameter("token");
+            }
+            if (StrUtil.isBlank(token)){
+                log.error("获得当前登录token失败, token{}",token);
+                return null;
+            }
+
+            String adminId = JWT.decode(token).getAudience().get(0);
+            return staticAdminService.getAdminById(Integer.valueOf(adminId));
+        }catch (Exception e){
+            log.error("获取当前登录的管理员信息失败,token={}",token,e);
+            return null;
+        }
+    }
+
+}
